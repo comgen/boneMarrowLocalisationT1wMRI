@@ -13,3 +13,6 @@ Icon?
 # Files that might appear on external disk or network shares
 .Spotlight-V100
 .Trashes
+
+# Temporary word files
+~$*
