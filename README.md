@@ -2,10 +2,12 @@ This is the code that accompanies the paper - Estimating bone marrow adiposity f
 
 A description of how to use this code can be found in 000_README.pdf file (https://github.com/comgen/boneMarrowLocalisationT1wMRI/blob/main/000_README.pdf)
 
-The GWAS summary statistics are published on FUMA:
+Summaries of the GWAS statistics are published on FUMA:
 * Male and female discovery: https://fuma.ctglab.nl/browse/153909
 * Male discovery: https://fuma.ctglab.nl/browse/153916
 * Female discovery: https://fuma.ctglab.nl/browse/153914
+
+For the full GWAS summary statistics file, see the release v1.2 of this repository.
 
 ## Overview of the artificial neural network training, application, and validation:
 ![Overview](figure_1.png "Overview of the artificial neural network training, application, and validation")
