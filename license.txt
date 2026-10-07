@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Timothy Hughes and Pål Marius Bjørnstad
+Copyright (c) 2026 Timothy Hughes, Pål Marius Bjørnstad, Tobias Kaufmann
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
