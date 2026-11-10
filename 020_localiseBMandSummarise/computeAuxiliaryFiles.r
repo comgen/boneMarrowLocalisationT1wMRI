@@ -1,12 +1,16 @@
-library("ggplot2")
-library("pals")
+#library("ggplot2")
+#library("pals")
 
 # This script computes key structure stats for each vertex in the input and, for vertices with sufficient total intensity, it generates an intensity plot of all "good" vertices and computes key structure summary stats across these "good" vertices
 # Inputs: the intensity matrix and the bounds (computed by the NN)
 # Outputs:
 # - stats for all vertices
-# - stats for calvarial vertices and figure
-# - stats across calvarial vertices and figure
+# - stats for calvarial vertices (figure currently disabled)
+# - stats across calvarial vertices (figure currently disabled)
+
+# NOTE: plotting is currently disabled. To re-enable the figures, uncomment library("ggplot2") and
+# library("pals") above, the QC plot lines after the Mahalanobis distance computation (output file 3),
+# and the plotMatrix()/ggsave() lines at the end of the script (output file 5).
 
 # Vertices outside the region of interest have had their intensity array set to 0.
 # We define "calvarial" as vertices that have a sum of intensities above a
@@ -35,11 +39,12 @@ pdf(NULL) # to suppress the creation of the Rplots.pdf
 dir="/Users/timothyh/home/proj_bma/010_bmDetectionAlgorithms/test/"
 sample="FS_1334172"
 
-# Rscript options.R x y z
+
 # Parse the command line
 args = commandArgs(trailingOnly = TRUE)
-if(length(args) != 2){
-  stop("You must supply the intensity file and the bounds file (in that order)")
+
+if (length(args) < 2 || length(args) > 3) {
+  stop("Usage: Rscript computeAuxiliaryFiles.r <intensities-file> <bounds-file> [output-dir]")
 }
 
 # Two inputs: intensity file and bounds file
@@ -48,23 +53,32 @@ if(length(args) != 2){
 intensitiesFilePath = args[1];
 boundsFilePath = args[2];
 
+# Default to the intensity file's directory when no output directory is specified.
+outputDir = if (length(args) == 3) args[3] else dirname(intensitiesFilePath)
+
+if (!dir.exists(outputDir)) {
+  stop(paste("Output directory does not exist:", outputDir))
+}
+
 cat(paste("Present working directory: ",getwd(), "\n"))
 cat(paste("Intensities file: ", intensitiesFilePath, "\n"))
 cat(paste("Bounds file: ", boundsFilePath, "\n"))
 cat(paste("Assuming separator in both input files is ';'\n"))
-cat(paste("Output files will be written to: ", dirname(intensitiesFilePath), "\n"))
+cat(paste("Output files will be written to: ", outputDir, "\n"))
 
 # Output files ###########################################################################
 
+outputFileRoot = tools::file_path_sans_ext(basename(intensitiesFilePath))
+
 # Vertex level - all vertices
-outputFilePath_1 = paste(tools::file_path_sans_ext(intensitiesFilePath),"_structData_allVertices.csv",sep="")
+outputFilePath_1 = file.path(outputDir, paste0(outputFileRoot, "_structData_allVertices.csv"))
 # Vertex level - calvarial vertices
-outputFilePath_2 = paste(tools::file_path_sans_ext(intensitiesFilePath),"_structData_calvarialVertices.csv",sep="") # also add MD distance
-outputFilePath_3 = paste(tools::file_path_sans_ext(intensitiesFilePath),"_structData_calvarialVertices_bmFirstVsBmIntMean.png",sep="") # for checking for outliers (QC)
+outputFilePath_2 = file.path(outputDir, paste0(outputFileRoot, "_structData_calvarialVertices.csv")) # also add MD distance
+outputFilePath_3 = file.path(outputDir, paste0(outputFileRoot, "_structData_calvarialVertices_bmFirstVsBmIntMean.png")) # for checking for outliers (QC)
 # Summaries across vertices - scan level data used for QC and for final BMA intensity output
-outputFilePath_4a = paste(tools::file_path_sans_ext(intensitiesFilePath),"_structData_calvarialVertices_summaryStats.csv",sep="") # summary stats across vertices
-outputFilePath_4b = paste(tools::file_path_sans_ext(intensitiesFilePath),"_structData_calvarialVertices_summaryStats_exclMDoutliers.csv",sep="") # summary stats across vertices
-outputFilePath_5 = paste(tools::file_path_sans_ext(intensitiesFilePath),"_structData_calvarialVertices_intensitiesAndBounds.png",sep="") # for checking quality of NN
+outputFilePath_4a = file.path(outputDir, paste0(outputFileRoot, "_structData_calvarialVertices_summaryStats.csv")) # summary stats across vertices
+outputFilePath_4b = file.path(outputDir, paste0(outputFileRoot, "_structData_calvarialVertices_summaryStats_exclMDoutliers.csv")) # summary stats across vertices
+outputFilePath_5 = file.path(outputDir, paste0(outputFileRoot, "_structData_calvarialVertices_intensitiesAndBounds.png")) # for checking quality of NN
 
 # Load data ##############################################################################
 
@@ -104,9 +118,7 @@ if(dim(bounds)[1] != dim(intensityMatrix)[1]){
 
 cat("Computing structure data for each vertex.\n")
 # Setup dataframe
-vertexMeansAndSd = setNames(
-  data.frame(matrix(ncol = 28, nrow = 0)),
-  nm = c(
+vertexColNames = c(
     "obIntMean", "bmIntMean", "ibIntMean", "allIntMean",
     "obIntSum", "bmIntSum", "ibIntSum", "allIntSum",
     "obIntSd", "bmIntSd", "ibIntSd", "allIntSd",
@@ -114,7 +126,10 @@ vertexMeansAndSd = setNames(
     "obFirst", "bmFirst", "ibFirst", "allFirst",
     "obLast", "bmLast", "ibLast", "allLast",
     "bmCoreIntMean", "obCoreIntMean", "bmCoreMidlineIntMean"
-  )
+)
+vertexMeansAndSd = setNames(
+  data.frame(matrix(ncol = length(vertexColNames), nrow = 0)),
+  nm = vertexColNames
 )
 
 for(row in 1:dim(bounds)[1]) {
@@ -224,14 +239,14 @@ cat(">>>>> Outputing to file:", outputFilePath_2, "\n\n")
 write.table(vertexMeansAndSdRedux, file=outputFilePath_2, row.names=FALSE, col.names=TRUE, sep=";")
 
 # Create the QC plot and write to file
-cat("Generating point plot for all calvarial vertices of bmFirst vs. bmIntMean (marking MD outliers).\n")
-ggplot() + theme_bw() + geom_jitter(data=vertexMeansAndSdRedux, aes(x=bmFirst, y=bmIntMean, colour=MD>25), alpha=0.1, size=0.5) + xlim (0,50) + ylim(0,255) + geom_vline(xintercept=10) + geom_vline(xintercept=30)
-cat(">>>>> Outputing to file:", outputFilePath_3, "\n\n")
-ggsave(file=outputFilePath_3, height=10, width=10, units="cm")
+#cat("Generating point plot for all calvarial vertices of bmFirst vs. bmIntMean (marking MD outliers).\n")
+#ggplot() + theme_bw() + geom_jitter(data=vertexMeansAndSdRedux, aes(x=bmFirst, y=bmIntMean, colour=MD>25), alpha=0.1, size=0.5) + xlim (0,50) + ylim(0,255) + geom_vline(xintercept=10) + geom_vline(xintercept=30)
+#cat(">>>>> Outputing to file:", outputFilePath_3, "\n\n")
+#ggsave(file=outputFilePath_3, height=10, width=10, units="cm")
 
 
 ####################################################################################################
-# Compute the summary stats across vertices for all 25 of the vertex variables (4 intensity means, 4 sums, 4 intensity sd, 4 thicknesses, 4 first layers, 4 last layers ,MD). The 4 structures are ob (outerbone), bm (bone marrow), ob (outerbone), all (all layers).
+# Compute the summary stats across vertices for all 28 of the vertex variables (4 intensity means, 4 sums, 4 intensity sd, 4 thicknesses, 4 first layers, 4 last layers, 3 core intensity means, MD). The 4 structures are ob (outerbone), bm (bone marrow), ob (outerbone), all (all layers).
 ####################################################################################################
 
 computeSummaryStats = function(inputVector){
@@ -316,7 +331,7 @@ plotMatrix = function(verticesByLayers, bounds, firstVertexToPlot, lastVertexToP
 
 
 # Plot intensities and bounds (include some of above stats in plot)
-cat("Plotting intensities and bounds for calvarial vertices.\n")
+#cat("Plotting intensities and bounds for calvarial vertices.\n")
 
 obIntMean = as.numeric(subset(summaryStatsAcrossCalvarialVertices, statName=="obIntMean")$mean)
 bmIntMean = as.numeric(subset(summaryStatsAcrossCalvarialVertices, statName=="bmIntMean")$mean)
@@ -325,9 +340,9 @@ ibIntMean = as.numeric(subset(summaryStatsAcrossCalvarialVertices, statName=="ib
 qcMetrics = paste("NbVertices: ", nbVs, " - AvgIntOB: ", round(obIntMean,1), " - AvgIntBM: ", round(bmIntMean,1), " - AvgIntIB: ", round(ibIntMean,1))
 title = paste(basename(intensitiesFilePath), " - ", qcMetrics)
 # Call the plotting function and save to file
-plotMatrix(intensityMatrixRedux, boundsRedux, 1, nrow(intensityMatrixRedux), title)
-cat(">>>>> Outputing to file:", outputFilePath_5, "\n\n")
-ggsave(file=outputFilePath_5, height=20, width=30, units="cm")
+#plotMatrix(intensityMatrixRedux, boundsRedux, 1, nrow(intensityMatrixRedux), title)
+#cat(">>>>> Outputing to file:", outputFilePath_5, "\n\n")
+#ggsave(file=outputFilePath_5, height=20, width=30, units="cm")
 
 cat("Run complete\n\n")
 
