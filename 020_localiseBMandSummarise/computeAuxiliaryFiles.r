@@ -8,7 +8,13 @@ library("pals")
 # - stats for calvarial vertices and figure
 # - stats across calvarial vertices and figure
 
-# Vertices outside the region of interest have had their intensity array set to 0. We define "calvarial" as vertices that have a sum of intensities above a threshold indicating that they are in the region of the cranium that we wish to analyse.  Note that there can be vertices with high intensities that are outside the region of interest (for example the tops of the ears) and there can be vertices with low intensities that are within the region of interest (relatively unlikely, but could occur).
+# Vertices outside the region of interest have had their intensity array set to 0.
+# We define "calvarial" as vertices that have a sum of intensities above a
+# threshold indicating that they are in the region of the cranium that we wish
+# to analyse. Note that there can be vertices with high intensities that are
+# outside the region of interest (for example the tops of the ears), and there
+# can be vertices with low intensities that are within the region of interest
+# (relatively unlikely, but could occur).
 
 # At each vertex we sum the intensity of all layers, if this is below the cutoff this indicates that
 # the vertex is likely outside the region of interest, and we do not include it in the plots or
@@ -98,7 +104,18 @@ if(dim(bounds)[1] != dim(intensityMatrix)[1]){
 
 cat("Computing structure data for each vertex.\n")
 # Setup dataframe
-vertexMeansAndSd = setNames(data.frame(matrix(ncol = 24, nrow = 0)), nm = c("obIntMean", "bmIntMean", "ibIntMean", "allIntMean", "obIntSum", "bmIntSum", "ibIntSum", "allIntSum", "obIntSd", "bmIntSd", "ibIntSd","allIntSd","obThick", "bmThick", "ibThick", "allThick", "obFirst", "bmFirst", "ibFirst", "allFirst", "obLast", "bmLast", "ibLast", "allLast" ))
+vertexMeansAndSd = setNames(
+  data.frame(matrix(ncol = 28, nrow = 0)),
+  nm = c(
+    "obIntMean", "bmIntMean", "ibIntMean", "allIntMean",
+    "obIntSum", "bmIntSum", "ibIntSum", "allIntSum",
+    "obIntSd", "bmIntSd", "ibIntSd", "allIntSd",
+    "obThick", "bmThick", "ibThick", "allThick",
+    "obFirst", "bmFirst", "ibFirst", "allFirst",
+    "obLast", "bmLast", "ibLast", "allLast",
+    "bmCoreIntMean", "obCoreIntMean", "bmCoreMidlineIntMean"
+  )
+)
 
 for(row in 1:dim(bounds)[1]) {
   ob = intensityMatrix[row,bounds[row,1]:bounds[row,2]]
@@ -135,10 +152,38 @@ for(row in 1:dim(bounds)[1]) {
   vertexMeansAndSd[row,]$bmThick = length(bm)
   vertexMeansAndSd[row,]$ibThick = length(ib)
   vertexMeansAndSd[row,]$allThick = length(all)
-
+  
+  # BM core: starts one layer after the first BM layer and spans up to 3 layers,
+  # never going beyond the last BM layer. If the BM is a single layer, use that layer.
+  # Clamping the start with min(..., bmLast) means coreFirst <= coreLast always holds, so the result is never NA.
+  coreFirst = min(bounds[row,3] + 1, bounds[row,4])
+  coreLast  = min(bounds[row,3] + 3, bounds[row,4])
+  vertexMeansAndSd[row,]$bmCoreIntMean = mean(intensityMatrix[row, coreFirst:coreLast])
+  
+  # OB core: exclude the first and last OB layers. If that leaves no layers
+  # (OB thickness < 3), use the first and last layers, i.e. the whole OB.
+  obCoreFirst = bounds[row,1] + 1
+  obCoreLast  = bounds[row,2] - 1
+  if (obCoreFirst > obCoreLast) {
+    obCoreFirst = bounds[row,1]
+    obCoreLast  = bounds[row,2]
+  }
+  vertexMeansAndSd[row,]$obCoreIntMean = mean(intensityMatrix[row, obCoreFirst:obCoreLast])
+  
+  # BM core midline: starts one layer after the first BM layer and ends at the mid BM layer
+  # (rounded down for an even thickness). If that leaves no layers (BM thickness < 3),
+  # use the first and last BM layers, i.e. the whole BM.
+  bmMidlineFirst = bounds[row,3] + 1
+  bmMidlineLast  = floor((bounds[row,3] + bounds[row,4]) / 2)
+  if (bmMidlineFirst > bmMidlineLast) {
+    bmMidlineFirst = bounds[row,3]
+    bmMidlineLast  = bounds[row,4]
+  }
+  vertexMeansAndSd[row,]$bmCoreMidlineIntMean = mean(intensityMatrix[row, bmMidlineFirst:bmMidlineLast])
+  
   # SD is NA for scalar (when a layer has a thickness of 1), so need to fix by setting to 0
   vertexMeansAndSd[row,] = ifelse(is.na(vertexMeansAndSd[row,]), 0, vertexMeansAndSd[row,])
-  
+
 } # END of loop over vertices
 
 # Write dataframe to file
