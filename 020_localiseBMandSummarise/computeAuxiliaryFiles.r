@@ -117,7 +117,6 @@ if(dim(bounds)[1] != dim(intensityMatrix)[1]){
 ###########################################################
 
 cat("Computing structure data for each vertex.\n")
-# Setup dataframe
 vertexColNames = c(
     "obIntMean", "bmIntMean", "ibIntMean", "allIntMean",
     "obIntSum", "bmIntSum", "ibIntSum", "allIntSum",
@@ -127,53 +126,31 @@ vertexColNames = c(
     "obLast", "bmLast", "ibLast", "allLast",
     "bmCoreIntMean", "obCoreIntMean", "bmCoreMidlineIntMean"
 )
-vertexMeansAndSd = setNames(
-  data.frame(matrix(ncol = length(vertexColNames), nrow = 0)),
-  nm = vertexColNames
-)
 
-for(row in 1:dim(bounds)[1]) {
+# Preallocate a numeric matrix; filling it by index avoids copying a data frame on every assignment
+vertexStats = matrix(NA_real_, nrow = nrow(bounds), ncol = length(vertexColNames),
+                     dimnames = list(NULL, vertexColNames))
+
+for(row in seq_len(nrow(bounds))) {
   ob = intensityMatrix[row,bounds[row,1]:bounds[row,2]]
   bm = intensityMatrix[row,bounds[row,3]:bounds[row,4]]
   ib = intensityMatrix[row,bounds[row,5]:bounds[row,6]]
   all = intensityMatrix[row,1:nbLayersPerVertex]
-  
-  vertexMeansAndSd[row,]$obFirst = bounds[row,1]
-  vertexMeansAndSd[row,]$bmFirst = bounds[row,3]
-  vertexMeansAndSd[row,]$ibFirst = bounds[row,5]
-  vertexMeansAndSd[row,]$allFirst = 1;
-  
-  vertexMeansAndSd[row,]$obLast = bounds[row,2]
-  vertexMeansAndSd[row,]$bmLast = bounds[row,4]
-  vertexMeansAndSd[row,]$ibLast = bounds[row,6]
-  vertexMeansAndSd[row,]$allLast = length(all);
-  
-  vertexMeansAndSd[row,]$obIntMean =  mean(ob)
-  vertexMeansAndSd[row,]$bmIntMean = mean(bm)
-  vertexMeansAndSd[row,]$ibIntMean = mean(ib)
-  vertexMeansAndSd[row,]$allIntMean = mean(all)
-  
-  vertexMeansAndSd[row,]$obIntSum =  sum(ob)
-  vertexMeansAndSd[row,]$bmIntSum = sum(bm)
-  vertexMeansAndSd[row,]$ibIntSum = sum(ib)
-  vertexMeansAndSd[row,]$allIntSum = sum(all)
-  
-  vertexMeansAndSd[row,]$obIntSd = sd(ob)
-  vertexMeansAndSd[row,]$bmIntSd = sd(bm)
-  vertexMeansAndSd[row,]$ibIntSd = sd(ib)
-  vertexMeansAndSd[row,]$allIntSd = sd(all)
-  
-  vertexMeansAndSd[row,]$obThick = length(ob)
-  vertexMeansAndSd[row,]$bmThick = length(bm)
-  vertexMeansAndSd[row,]$ibThick = length(ib)
-  vertexMeansAndSd[row,]$allThick = length(all)
-  
+
+  vertexStats[row, c("obFirst", "bmFirst", "ibFirst", "allFirst")] = c(bounds[row,1], bounds[row,3], bounds[row,5], 1)
+  vertexStats[row, c("obLast", "bmLast", "ibLast", "allLast")] = c(bounds[row,2], bounds[row,4], bounds[row,6], length(all))
+
+  vertexStats[row, c("obIntMean", "bmIntMean", "ibIntMean", "allIntMean")] = c(mean(ob), mean(bm), mean(ib), mean(all))
+  vertexStats[row, c("obIntSum", "bmIntSum", "ibIntSum", "allIntSum")] = c(sum(ob), sum(bm), sum(ib), sum(all))
+  vertexStats[row, c("obIntSd", "bmIntSd", "ibIntSd", "allIntSd")] = c(sd(ob), sd(bm), sd(ib), sd(all))
+  vertexStats[row, c("obThick", "bmThick", "ibThick", "allThick")] = c(length(ob), length(bm), length(ib), length(all))
+
   # BM core: starts one layer after the first BM layer and spans up to 3 layers,
   # never going beyond the last BM layer. If the BM is a single layer, use that layer.
   # Clamping the start with min(..., bmLast) means coreFirst <= coreLast always holds, so the result is never NA.
   coreFirst = min(bounds[row,3] + 1, bounds[row,4])
   coreLast  = min(bounds[row,3] + 3, bounds[row,4])
-  vertexMeansAndSd[row,]$bmCoreIntMean = mean(intensityMatrix[row, coreFirst:coreLast])
+  vertexStats[row, "bmCoreIntMean"] = mean(intensityMatrix[row, coreFirst:coreLast])
   
   # OB core: exclude the first and last OB layers. If that leaves no layers
   # (OB thickness < 3), use the first and last layers, i.e. the whole OB.
@@ -183,7 +160,7 @@ for(row in 1:dim(bounds)[1]) {
     obCoreFirst = bounds[row,1]
     obCoreLast  = bounds[row,2]
   }
-  vertexMeansAndSd[row,]$obCoreIntMean = mean(intensityMatrix[row, obCoreFirst:obCoreLast])
+  vertexStats[row, "obCoreIntMean"] = mean(intensityMatrix[row, obCoreFirst:obCoreLast])
   
   # BM core midline: starts one layer after the first BM layer and ends at the mid BM layer
   # (rounded down for an even thickness). If that leaves no layers (BM thickness < 3),
@@ -194,16 +171,13 @@ for(row in 1:dim(bounds)[1]) {
     bmMidlineFirst = bounds[row,3]
     bmMidlineLast  = bounds[row,4]
   }
-  vertexMeansAndSd[row,]$bmCoreMidlineIntMean = mean(intensityMatrix[row, bmMidlineFirst:bmMidlineLast])
-  
-  # SD is NA for scalar (when a layer has a thickness of 1), so need to fix by setting to 0
-  vertexMeansAndSd[row,] = ifelse(is.na(vertexMeansAndSd[row,]), 0, vertexMeansAndSd[row,])
+  vertexStats[row, "bmCoreMidlineIntMean"] = mean(intensityMatrix[row, bmMidlineFirst:bmMidlineLast])
+}
 
-} # END of loop over vertices
+# SD is NA when a layer has a thickness of 1, so set NAs to 0 (once, after the loop)
+vertexStats[is.na(vertexStats)] = 0
+vertexMeansAndSd = as.data.frame(vertexStats)
 
-# Write dataframe to file
-# Include a header in the output file so that we know what the columns are.
-# Use bounds filename as root
 cat(">>>>> Outputing to file:", outputFilePath_1, "\n\n")
 write.table(vertexMeansAndSd, file=outputFilePath_1, row.names=FALSE, col.names=TRUE, sep=";")
 
